@@ -1,0 +1,17 @@
+{
+  "name": "mailtrigger",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "cookie": "^0.7.0",
+    "googleapis": "^144.0.0",
+    "@google/generative-ai": "^0.21.0",
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.8.0",
+    "xlsx": "^0.18.5"
+  }
+}

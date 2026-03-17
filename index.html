@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MailTrigger – 발주/견적 메일 분류기</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary:   #0f1117;
+      --bg-secondary: #1a1d27;
+      --bg-card:      #1e2130;
+      --bg-hover:     #252840;
+      --bg-active:    #2d3155;
+      --border:       #2a2d3e;
+      --border-light: #383c54;
+      --accent:       #6c63ff;
+      --accent-hover: #7c74ff;
+      --accent-soft:  #6c63ff22;
+      --text-primary:   #e8eaf6;
+      --text-secondary: #9299b8;
+      --text-muted:     #5c6080;
+      --success: #4caf90;
+      --warning: #f0a500;
+      --error:   #e05c5c;
+      --info:    #4b9ef5;
+
+      --cat-발주서:    #ef4444;
+      --cat-견적서:    #f59e0b;
+      --cat-견적의뢰서: #6c63ff;
+      --cat-기타:     #6b7280;
+
+      --sidebar-width: 220px;
+      --topbar-height: 60px;
+      --detail-width: 440px;
+      --radius: 10px;
+      --radius-sm: 6px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.4);
+      --transition: 0.18s ease;
+    }
+
+    html, body { height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg-primary); color: var(--text-primary); font-size: 14px; overflow: hidden; }
+    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+
+    #app { display: flex; flex-direction: column; height: 100vh; }
+
+    /* Topbar */
+    #topbar { height: var(--topbar-height); background: var(--bg-secondary); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 16px; flex-shrink: 0; z-index: 100; }
+    .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; color: var(--text-primary); text-decoration: none; }
+    .logo-icon { width: 32px; height: 32px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .spacer { flex: 1; }
+    .user-info { display: flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 13px; }
+    .user-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: white; }
+    #btn-settings { width: 36px; height: 36px; border-radius: var(--radius-sm); background: transparent; border: 1px solid var(--border); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: var(--transition); font-size: 16px; }
+    #btn-settings:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    /* Layout */
+    #main-content { display: flex; flex: 1; overflow: hidden; }
+
+    /* Sidebar */
+    #sidebar { width: var(--sidebar-width); background: var(--bg-secondary); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; flex-shrink: 0; }
+    .sidebar-section-title { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--text-muted); text-transform: uppercase; padding: 20px 16px 8px; }
+    .sidebar-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; cursor: pointer; transition: var(--transition); color: var(--text-secondary); border-left: 3px solid transparent; }
+    .sidebar-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .sidebar-item.active { background: var(--bg-active); color: var(--text-primary); border-left-color: var(--accent); }
+    .sidebar-item .cat-icon { font-size: 15px; width: 20px; text-align: center; }
+    .sidebar-item .cat-name { flex: 1; font-size: 13px; font-weight: 500; }
+    .sidebar-item .cat-count { font-size: 11px; background: var(--bg-card); color: var(--text-muted); padding: 2px 7px; border-radius: 10px; min-width: 24px; text-align: center; }
+    .sidebar-item.active .cat-count { background: var(--accent); color: white; }
+    .sidebar-divider { height: 1px; background: var(--border); margin: 8px 16px; }
+
+    #btn-refresh { margin: 12px 16px; padding: 9px 16px; background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: var(--transition); }
+    #btn-refresh:hover { background: var(--accent-hover); }
+    #btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Auto-refresh toggle */
+    .auto-refresh-row { display: flex; align-items: center; gap: 8px; padding: 4px 16px 12px; }
+    .auto-refresh-label { font-size: 11px; color: var(--text-muted); flex: 1; }
+    .toggle { position: relative; width: 32px; height: 18px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; inset: 0; background: var(--border-light); border-radius: 18px; cursor: pointer; transition: .3s; }
+    .toggle-slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .3s; }
+    .toggle input:checked + .toggle-slider { background: var(--accent); }
+    .toggle input:checked + .toggle-slider:before { transform: translateX(14px); }
+
+    #progress-bar-container { padding: 0 16px 12px; display: none; }
+    .progress-label { font-size: 11px; color: var(--text-muted); margin-bottom: 5px; }
+    .progress-track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s ease; }
+
+    /* Alert banner in sidebar */
+    #alert-banner { margin: 0 12px 12px; padding: 10px 12px; background: #ef444415; border: 1px solid #ef444440; border-radius: var(--radius-sm); display: none; }
+    .alert-banner-title { font-size: 11px; font-weight: 700; color: #ef4444; margin-bottom: 4px; }
+    .alert-banner-item { font-size: 11px; color: var(--text-secondary); line-height: 1.5; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+    /* Email List */
+    #email-list-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+    #email-list-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: var(--bg-secondary); flex-shrink: 0; }
+    #email-list-header h2 { font-size: 16px; font-weight: 600; }
+    #email-count-badge { font-size: 12px; color: var(--text-muted); background: var(--bg-card); padding: 3px 9px; border-radius: 12px; }
+    #search-input { margin-left: auto; padding: 7px 12px; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); border-radius: var(--radius-sm); font-size: 13px; outline: none; width: 200px; transition: var(--transition); }
+    #search-input:focus { border-color: var(--accent); }
+    #search-input::placeholder { color: var(--text-muted); }
+    #email-list { flex: 1; overflow-y: auto; padding: 8px; }
+
+    /* Email Cards */
+    .email-card { padding: 14px 16px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--bg-card); margin-bottom: 6px; cursor: pointer; transition: var(--transition); position: relative; }
+    .email-card:hover { background: var(--bg-hover); border-color: var(--border-light); transform: translateY(-1px); }
+    .email-card.selected { border-color: var(--accent); background: var(--bg-active); }
+    .email-card.unread .email-subject { font-weight: 700; }
+    .email-card.important { border-left: 3px solid var(--cat-발주서); }
+    .email-card.important.cat-견적서 { border-left-color: var(--cat-견적서); }
+    .email-card.important.cat-견적의뢰서 { border-left-color: var(--cat-견적의뢰서); }
+    .email-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+    .email-sender { font-size: 13px; font-weight: 600; color: var(--text-primary); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .email-date { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+    .email-subject { font-size: 13px; color: var(--text-primary); margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .email-preview { font-size: 12px; color: var(--text-secondary); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.5; }
+    .email-footer { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+    .category-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; }
+    .unread-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-left: auto; }
+    .attach-icon { font-size: 11px; color: var(--text-muted); }
+
+    /* Badge colors */
+    .badge-발주서    { background: #ef444422; color: var(--cat-발주서); }
+    .badge-견적서    { background: #f59e0b22; color: var(--cat-견적서); }
+    .badge-견적의뢰서 { background: #6c63ff22; color: var(--cat-견적의뢰서); }
+    .badge-기타      { background: #6b728022; color: var(--cat-기타); }
+
+    /* Email Detail */
+    #email-detail-panel { width: var(--detail-width); border-left: 1px solid var(--border); background: var(--bg-secondary); display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0; transition: width var(--transition); }
+    #email-detail-panel.collapsed { width: 0; border: none; }
+    #detail-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    #btn-close-detail { width: 28px; height: 28px; border-radius: 6px; background: transparent; border: 1px solid var(--border); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: var(--transition); }
+    #btn-close-detail:hover { background: var(--bg-hover); color: var(--text-primary); }
+    #detail-content { flex: 1; overflow-y: auto; padding: 20px; }
+    .detail-subject { font-size: 16px; font-weight: 700; color: var(--text-primary); margin-bottom: 12px; line-height: 1.4; }
+    .detail-meta { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; }
+    .detail-meta-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; }
+    .detail-meta-label { color: var(--text-muted); min-width: 44px; }
+    .detail-meta-value { color: var(--text-secondary); flex: 1; word-break: break-all; }
+    .detail-section { margin-bottom: 20px; }
+    .detail-section-title { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+    .detail-section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .ai-summary-box { background: var(--accent-soft); border: 1px solid #6c63ff44; border-radius: var(--radius); padding: 14px; font-size: 13px; line-height: 1.6; color: var(--text-primary); }
+    .ai-icon { font-size: 16px; margin-bottom: 6px; display: block; }
+    .products-box { background: #ef444410; border: 1px solid #ef444430; border-radius: var(--radius); padding: 14px; font-size: 13px; line-height: 1.7; color: var(--text-primary); white-space: pre-wrap; }
+    .products-box.cat-견적서 { background: #f59e0b10; border-color: #f59e0b30; }
+    .products-box.cat-견적의뢰서 { background: #6c63ff10; border-color: #6c63ff30; }
+    .detail-body { font-size: 13px; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 350px; overflow-y: auto; background: var(--bg-card); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border); }
+    .attach-list { display: flex; flex-direction: column; gap: 6px; }
+    .attach-item { display: flex; align-items: center; gap: 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 12px; color: var(--text-secondary); }
+    .attach-item-icon { font-size: 16px; }
+    .attach-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .attach-item-size { color: var(--text-muted); white-space: nowrap; }
+
+    /* States */
+    #empty-state, #loading-state, #auth-state, #error-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px; padding: 40px; text-align: center; }
+    .state-icon { font-size: 48px; opacity: 0.6; }
+    .state-title { font-size: 18px; font-weight: 600; color: var(--text-primary); }
+    .state-desc { font-size: 14px; color: var(--text-secondary); max-width: 300px; line-height: 1.6; }
+
+    .btn-primary { padding: 10px 24px; background: var(--accent); color: white; border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; transition: var(--transition); display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+    .btn-outline { padding: 9px 20px; background: transparent; color: var(--text-primary); border: 1px solid var(--border-light); border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; transition: var(--transition); }
+    .btn-outline:hover { background: var(--bg-hover); }
+    .btn-google { padding: 11px 24px; background: white; color: #333; border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 10px; transition: var(--transition); box-shadow: var(--shadow); }
+    .btn-google:hover { background: #f5f5f5; transform: translateY(-1px); }
+    .btn-google svg { width: 18px; height: 18px; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    .spinner-sm { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+
+    /* Settings Modal */
+    #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+    #modal-overlay.open { display: flex; }
+    #settings-modal { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius); width: 480px; max-width: 95vw; box-shadow: var(--shadow); overflow: hidden; }
+    .modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .modal-header h3 { font-size: 16px; font-weight: 700; }
+    .modal-close { width: 28px; height: 28px; border-radius: 6px; background: transparent; border: 1px solid var(--border); color: var(--text-secondary); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; transition: var(--transition); }
+    .modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .modal-body { padding: 24px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+    .form-group { margin-bottom: 20px; }
+    .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 7px; letter-spacing: 0.04em; }
+    .form-input, .form-select { width: 100%; padding: 9px 12px; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-primary); border-radius: var(--radius-sm); font-size: 13px; outline: none; transition: var(--transition); }
+    .form-input:focus, .form-select:focus { border-color: var(--accent); }
+    .form-input::placeholder { color: var(--text-muted); }
+    .form-select { cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236b7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+    .form-hint { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+    .form-row { display: flex; gap: 10px; align-items: flex-end; }
+    .form-row .form-group { flex: 1; margin-bottom: 0; }
+    .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+    .status-item { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; }
+    .status-item-label { font-size: 11px; color: var(--text-muted); margin-bottom: 5px; }
+    .status-item-value { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 5px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.ok { background: var(--success); }
+    .status-dot.err { background: var(--error); }
+    .warning-banner { background: #f59e0b1a; border: 1px solid #f59e0b44; border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; color: #f59e0b; line-height: 1.5; margin-bottom: 16px; }
+    .warning-banner strong { display: block; margin-bottom: 3px; }
+
+    /* Toast */
+    #toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
+    .toast { padding: 12px 18px; background: var(--bg-card); border: 1px solid var(--border-light); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 13px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 10px; animation: slideIn 0.25s ease; max-width: 340px; }
+    .toast.success { border-left: 3px solid var(--success); }
+    .toast.error   { border-left: 3px solid var(--error); }
+    .toast.info    { border-left: 3px solid var(--info); }
+    .toast.warning { border-left: 3px solid var(--warning); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* Notification permission banner */
+    #notif-banner { background: #6c63ff18; border-bottom: 1px solid #6c63ff33; padding: 8px 20px; font-size: 12px; color: var(--text-secondary); display: none; align-items: center; gap: 12px; flex-shrink: 0; }
+    #notif-banner.show { display: flex; }
+
+    @media (max-width: 900px) {
+      #email-detail-panel { width: 100%; position: fixed; right: 0; top: var(--topbar-height); bottom: 0; z-index: 50; border-left: none; }
+      #email-detail-panel.collapsed { width: 0; overflow: hidden; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <!-- Topbar -->
+  <div id="topbar">
+    <a class="logo" href="#">
+      <div class="logo-icon">📋</div>
+      MailTrigger
+    </a>
+    <div class="spacer"></div>
+    <div id="user-info-area" class="user-info" style="display:none;">
+      <div class="user-avatar" id="user-avatar-initial">?</div>
+      <span id="user-email-display"></span>
+      <button class="btn-outline" onclick="handleLogout()" style="margin-left:4px;padding:5px 12px;font-size:12px;">로그아웃</button>
+    </div>
+    <button id="btn-settings" onclick="openSettings()" title="설정">⚙</button>
+  </div>
+
+  <!-- Notification permission banner -->
+  <div id="notif-banner">
+    <span>🔔 발주서/견적서 알림을 받으려면 알림 권한을 허용해주세요.</span>
+    <button class="btn-outline" onclick="requestNotificationPermission()" style="padding:4px 12px;font-size:12px;">알림 허용</button>
+    <button onclick="document.getElementById('notif-banner').classList.remove('show')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;margin-left:auto;">✕</button>
+  </div>
+
+  <div id="main-content">
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <button id="btn-refresh" onclick="fetchEmails()">
+        <span id="refresh-icon">↻</span>
+        <span id="refresh-text">이메일 불러오기</span>
+      </button>
+
+      <div class="auto-refresh-row">
+        <span class="auto-refresh-label">자동 새로고침 (5분)</span>
+        <label class="toggle">
+          <input type="checkbox" id="toggle-autorefresh" onchange="toggleAutoRefresh(this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div id="progress-bar-container">
+        <div class="progress-label" id="progress-label">AI 분석 중...</div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Alert banner -->
+      <div id="alert-banner">
+        <div class="alert-banner-title">🔔 새 중요 메일</div>
+        <div id="alert-banner-items"></div>
+      </div>
+
+      <div class="sidebar-section-title">카테고리</div>
+
+      <div class="sidebar-item active" data-category="All" onclick="filterCategory('All')">
+        <span class="cat-icon">📬</span>
+        <span class="cat-name">전체</span>
+        <span class="cat-count" id="count-all">0</span>
+      </div>
+      <div class="sidebar-item" data-category="발주서" onclick="filterCategory('발주서')">
+        <span class="cat-icon">📦</span>
+        <span class="cat-name">발주서</span>
+        <span class="cat-count" id="count-발주서">0</span>
+      </div>
+      <div class="sidebar-item" data-category="견적서" onclick="filterCategory('견적서')">
+        <span class="cat-icon">💰</span>
+        <span class="cat-name">견적서</span>
+        <span class="cat-count" id="count-견적서">0</span>
+      </div>
+      <div class="sidebar-item" data-category="견적의뢰서" onclick="filterCategory('견적의뢰서')">
+        <span class="cat-icon">📝</span>
+        <span class="cat-name">견적의뢰서</span>
+        <span class="cat-count" id="count-견적의뢰서">0</span>
+      </div>
+      <div class="sidebar-item" data-category="기타" onclick="filterCategory('기타')">
+        <span class="cat-icon">📁</span>
+        <span class="cat-name">기타</span>
+        <span class="cat-count" id="count-기타">0</span>
+      </div>
+
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section-title">상태</div>
+      <div class="sidebar-item" style="cursor:default;">
+        <span class="cat-icon">🔗</span>
+        <span class="cat-name" style="font-size:12px;" id="sidebar-gmail-text">Gmail 연결 안됨</span>
+      </div>
+      <div class="sidebar-item" style="cursor:default;">
+        <span class="cat-icon">🤖</span>
+        <span class="cat-name" style="font-size:12px;" id="sidebar-ai-text">Gemini 설정 안됨</span>
+      </div>
+    </div>
+
+    <!-- Email List -->
+    <div id="email-list-panel">
+      <div id="email-list-header">
+        <h2 id="list-title">전체 메일</h2>
+        <span id="email-count-badge">0개</span>
+        <span id="scan-info" style="font-size:11px;color:var(--text-muted);display:none;"></span>
+        <input type="search" id="search-input" placeholder="🔍  검색..." oninput="handleSearch(this.value)" />
+      </div>
+      <div id="email-list">
+        <div id="auth-state">
+          <div class="state-icon">📭</div>
+          <div class="state-title">Gmail 로그인 필요</div>
+          <div class="state-desc">Gmail 계정과 연결하여 발주서·견적서·견적의뢰서를 AI로 자동 분류하세요.</div>
+          <button class="btn-google" onclick="handleGmailLogin()">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            Google로 로그인
+          </button>
+          <button class="btn-outline" onclick="openSettings()">⚙ 설정 먼저 하기</button>
+        </div>
+        <div id="loading-state" style="display:none;">
+          <div class="spinner"></div>
+          <div class="state-title">AI 분석 중...</div>
+          <div class="state-desc" id="loading-desc">이메일을 가져와 AI로 분류하고 있습니다.</div>
+        </div>
+        <div id="empty-state" style="display:none;">
+          <div class="state-icon">📪</div>
+          <div class="state-title" id="empty-title">발주/견적 메일 없음</div>
+          <div class="state-desc" id="empty-desc">최근 메일에서 발주, 견적, 견적의뢰 관련 내용이 발견되지 않았습니다.</div>
+        </div>
+        <div id="error-state" style="display:none;">
+          <div class="state-icon">⚠️</div>
+          <div class="state-title">오류 발생</div>
+          <div class="state-desc" id="error-message">이메일을 불러오는 중 오류가 발생했습니다.</div>
+          <button class="btn-primary" onclick="fetchEmails()">다시 시도</button>
+        </div>
+        <div id="emails-container"></div>
+      </div>
+    </div>
+
+    <!-- Email Detail -->
+    <div id="email-detail-panel" class="collapsed">
+      <div id="detail-header">
+        <button id="btn-close-detail" onclick="closeDetail()" title="닫기">✕</button>
+        <span style="font-size:13px;color:var(--text-secondary);">이메일 상세</span>
+        <div id="detail-category-badge" style="margin-left:auto;"></div>
+      </div>
+      <div id="detail-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="modal-overlay" onclick="closeSettingsOnOverlay(event)">
+  <div id="settings-modal">
+    <div class="modal-header">
+      <h3>⚙ 설정</h3>
+      <button class="modal-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="status-grid">
+        <div class="status-item">
+          <div class="status-item-label">Gmail 연결</div>
+          <div class="status-item-value" id="modal-gmail-status"><span class="status-dot err"></span> 연결 안됨</div>
+        </div>
+        <div class="status-item">
+          <div class="status-item-label">Gemini AI</div>
+          <div class="status-item-value" id="modal-gemini-status"><span class="status-dot err"></span> 설정 안됨</div>
+        </div>
+      </div>
+
+      <div id="no-secret-warning" class="warning-banner" style="display:none;">
+        <strong>⚠ Google OAuth 환경변수 미설정</strong>
+        
+        
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">GEMINI API KEY</label>
+        <div class="form-row">
+          <div class="form-group" style="flex:1;margin:0;">
+            <input type="password" class="form-input" id="input-api-key" placeholder="AIza..." />
+          </div>
+          <button class="btn-outline" onclick="testApiKey()" style="white-space:nowrap;height:36px;" id="btn-test-key">테스트</button>
+        </div>
+        <div class="form-hint"><a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);">Google AI Studio</a>에서 API 키를 발급받으세요.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">GEMINI 모델</label>
+        <select class="form-select" id="select-model">
+          <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (최신, 빠름, 권장)</option>
+          <option value="gemini-2.0-flash">gemini-2.0-flash (빠름)</option>
+          <option value="gemini-1.5-flash">gemini-1.5-flash (균형)</option>
+          <option value="gemini-1.5-pro">gemini-1.5-pro (고품질, 느림)</option>
+        </select>
+      </div>
+
+      <div class="sidebar-divider" style="margin:0 0 20px;"></div>
+
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">GMAIL 연결</label>
+        <div id="gmail-auth-section">
+          <button class="btn-google" onclick="handleGmailLogin()" id="btn-modal-gmail-login">
+            <svg viewBox="0 0 24 24" width="16" height="16">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            Google 계정 연결하기
+          </button>
+        </div>
+        <div id="gmail-connected-section" style="display:none;">
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+            <span style="color:var(--success);font-size:13px;">✓ 연결됨: <strong id="connected-email"></strong></span>
+            <button class="btn-outline" onclick="handleLogout()" style="font-size:12px;padding:5px 12px;">연결 해제</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-outline" onclick="closeSettings()">취소</button>
+      <button class="btn-primary" onclick="saveSettings()">💾 저장</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+// ── State ──
+const state = {
+  emails: [],
+  filteredEmails: [],
+  selectedEmailId: null,
+  currentCategory: 'All',
+  searchQuery: '',
+  isLoading: false,
+  isAuthenticated: false,
+  userEmail: null,
+  settings: { gemini_api_key: '', gemini_model: 'gemini-2.5-flash-lite' },
+  categoryCounts: {},
+  totalFetched: 0,
+  autoRefreshTimer: null
+};
+
+const IMPORTANT_CATS = ['발주서', '견적서', '견적의뢰서'];
+
+// ── API ──
+const API = {
+  async get(path) {
+    const res = await fetch(path);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+    return res.json();
+  },
+  async post(path, body) {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+    return res.json();
+  }
+};
+
+// ── Toast ──
+function toast(message, type = 'info', duration = 4000) {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  const icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
+  el.innerHTML = `<span style="font-size:16px;">${icons[type]||'ℹ'}</span><span>${message}</span>`;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = '0.25s ease';
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(100%)';
+    setTimeout(() => el.remove(), 300);
+  }, duration);
+}
+
+// ── Notifications ──
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  const perm = await Notification.requestPermission();
+  document.getElementById('notif-banner').classList.remove('show');
+  if (perm === 'granted') {
+    toast('알림이 활성화되었습니다.', 'success');
+  }
+}
+
+function checkNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    document.getElementById('notif-banner').classList.add('show');
+  }
+}
+
+function sendNotifications(emails) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+  const notified = new Set(JSON.parse(localStorage.getItem('notified_ids') || '[]'));
+  const newImportant = emails.filter(e =>
+    IMPORTANT_CATS.includes(e.category) && !notified.has(e.id)
+  );
+
+  newImportant.forEach(email => {
+    const senderName = email.sender?.name || email.sender?.email || '알 수 없음';
+    new Notification(`새 ${email.category} 도착`, {
+      body: `${senderName}\n${email.subject}`,
+      icon: ''
+    });
+    notified.add(email.id);
+  });
+
+  if (newImportant.length > 0) {
+    localStorage.setItem('notified_ids', JSON.stringify([...notified].slice(-200)));
+  }
+
+  // Update alert banner
+  updateAlertBanner(emails);
+}
+
+function updateAlertBanner(emails) {
+  const important = emails.filter(e => IMPORTANT_CATS.includes(e.category));
+  const banner = document.getElementById('alert-banner');
+  const items = document.getElementById('alert-banner-items');
+
+  if (important.length > 0) {
+    banner.style.display = 'block';
+    items.innerHTML = important.slice(0, 3).map(e =>
+      `<div class="alert-banner-item">· ${escapeHtml(e.subject)}</div>`
+    ).join('');
+    if (important.length > 3) {
+      items.innerHTML += `<div class="alert-banner-item" style="color:var(--text-muted);">+${important.length - 3}개 더...</div>`;
+    }
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+// ── Auto Refresh ──
+function toggleAutoRefresh(enabled) {
+  if (state.autoRefreshTimer) {
+    clearInterval(state.autoRefreshTimer);
+    state.autoRefreshTimer = null;
+  }
+  if (enabled) {
+    state.autoRefreshTimer = setInterval(() => {
+      if (state.isAuthenticated && state.settings.gemini_api_key && !state.isLoading) {
+        fetchEmails(true); // silent refresh
+      }
+    }, 5 * 60 * 1000);
+    toast('자동 새로고침 활성화 (5분 간격)', 'info');
+  } else {
+    toast('자동 새로고침 비활성화', 'info');
+  }
+}
+
+// ── Init ──
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('auth') === 'success') {
+    toast('Gmail 연결 성공!', 'success');
+    window.history.replaceState({}, '', '/');
+  } else if (params.get('auth') === 'error') {
+    toast(`Gmail 연결 실패: ${params.get('message') || '알 수 없는 오류'}`, 'error', 6000);
+    window.history.replaceState({}, '', '/');
+  }
+
+  await Promise.all([checkAuthStatus(), loadSettings()]);
+  updateSidebarStatus();
+  checkNotificationPermission();
+}
+
+// ── Auth ──
+async function checkAuthStatus() {
+  try {
+    const data = await API.get('/api/auth/status');
+    state.isAuthenticated = data.is_authenticated;
+    state.userEmail = data.email;
+    updateAuthUI();
+  } catch (e) {
+    console.error('Auth check failed:', e);
+  }
+}
+
+function updateAuthUI() {
+  const authState = document.getElementById('auth-state');
+  const userInfoArea = document.getElementById('user-info-area');
+
+  if (state.isAuthenticated && state.userEmail) {
+    authState.style.display = 'none';
+    userInfoArea.style.display = 'flex';
+    document.getElementById('user-email-display').textContent = state.userEmail;
+    document.getElementById('user-avatar-initial').textContent = state.userEmail[0].toUpperCase();
+    document.getElementById('gmail-auth-section').style.display = 'none';
+    document.getElementById('gmail-connected-section').style.display = 'block';
+    document.getElementById('connected-email').textContent = state.userEmail;
+    document.getElementById('modal-gmail-status').innerHTML = '<span class="status-dot ok"></span> 연결됨';
+  } else {
+    authState.style.display = 'flex';
+    userInfoArea.style.display = 'none';
+    document.getElementById('gmail-auth-section').style.display = 'block';
+    document.getElementById('gmail-connected-section').style.display = 'none';
+    document.getElementById('modal-gmail-status').innerHTML = '<span class="status-dot err"></span> 연결 안됨';
+  }
+}
+
+async function handleGmailLogin() {
+  try {
+    const health = await API.get('/api/health');
+    if (!health.client_secret_present) {
+      toast('Google OAuth 환경변수(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)가 설정되지 않았습니다.', 'error', 6000);
+      openSettings();
+      return;
+    }
+    const data = await API.get('/api/auth/login');
+    window.location.href = data.auth_url;
+  } catch (e) {
+    toast(`로그인 오류: ${e.message}`, 'error');
+  }
+}
+
+async function handleLogout() {
+  try {
+    await API.post('/api/auth/logout', {});
+    state.isAuthenticated = false;
+    state.userEmail = null;
+    state.emails = [];
+    state.filteredEmails = [];
+    updateAuthUI();
+    renderEmailList();
+    updateCategoryCounts({});
+    updateSidebarStatus();
+    closeSettings();
+    toast('로그아웃 완료', 'info');
+  } catch (e) {
+    toast(`로그아웃 오류: ${e.message}`, 'error');
+  }
+}
+
+// ── Settings ──
+async function loadSettings() {
+  try {
+    const data = await API.get('/api/settings');
+    state.settings = data;
+    const health = await API.get('/api/health');
+    document.getElementById('no-secret-warning').style.display = health.client_secret_present ? 'none' : 'block';
+    document.getElementById('input-api-key').value = data.gemini_api_key || '';
+    document.getElementById('select-model').value = data.gemini_model || 'gemini-2.5-flash-lite';
+    const ok = !!data.gemini_api_key;
+    document.getElementById('modal-gemini-status').innerHTML = ok
+      ? '<span class="status-dot ok"></span> 설정됨'
+      : '<span class="status-dot err"></span> 설정 안됨';
+  } catch (e) {
+    console.error('Settings load failed:', e);
+  }
+}
+
+function updateSidebarStatus() {
+  document.getElementById('sidebar-gmail-text').textContent = state.isAuthenticated
+    ? `✓ ${state.userEmail || 'Gmail 연결됨'}` : 'Gmail 연결 안됨';
+  document.getElementById('sidebar-ai-text').textContent = state.settings.gemini_api_key
+    ? `✓ ${state.settings.gemini_model}` : 'Gemini 설정 안됨';
+}
+
+async function saveSettings() {
+  const apiKey = document.getElementById('input-api-key').value.trim();
+  const model = document.getElementById('select-model').value;
+  try {
+    await API.post('/api/settings', { gemini_api_key: apiKey, gemini_model: model });
+    state.settings.gemini_api_key = apiKey;
+    state.settings.gemini_model = model;
+    document.getElementById('modal-gemini-status').innerHTML = apiKey
+      ? '<span class="status-dot ok"></span> 설정됨'
+      : '<span class="status-dot err"></span> 설정 안됨';
+    updateSidebarStatus();
+    toast('설정이 저장되었습니다.', 'success');
+    closeSettings();
+  } catch (e) {
+    toast(`저장 실패: ${e.message}`, 'error');
+  }
+}
+
+async function testApiKey() {
+  const apiKey = document.getElementById('input-api-key').value.trim();
+  const model = document.getElementById('select-model').value;
+  const btn = document.getElementById('btn-test-key');
+  if (!apiKey) { toast('API 키를 입력하세요.', 'error'); return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-sm"></span>';
+  try {
+    await API.post('/api/settings/test-key', { gemini_api_key: apiKey, gemini_model: model });
+    toast('API 키가 유효합니다! ✓', 'success');
+  } catch (e) {
+    toast(`API 키 오류: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '테스트';
+  }
+}
+
+function openSettings() { loadSettings(); document.getElementById('modal-overlay').classList.add('open'); }
+function closeSettings() { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeSettingsOnOverlay(e) { if (e.target === document.getElementById('modal-overlay')) closeSettings(); }
+
+// ── Fetch Emails ──
+async function fetchEmails(silent = false) {
+  if (!state.isAuthenticated) { toast('먼저 Gmail에 로그인하세요.', 'error'); return; }
+  if (!state.settings.gemini_api_key) { toast('Gemini API 키를 먼저 설정하세요.', 'error'); openSettings(); return; }
+
+  state.isLoading = true;
+  if (!silent) setLoadingState(true);
+
+  const refreshBtn = document.getElementById('btn-refresh');
+  const refreshIcon = document.getElementById('refresh-icon');
+  const refreshText = document.getElementById('refresh-text');
+  refreshBtn.disabled = true;
+  refreshIcon.style.animation = 'spin 1s linear infinite';
+  refreshText.textContent = '분석 중...';
+
+  const progress = document.getElementById('progress-bar-container');
+  const fill = document.getElementById('progress-fill');
+  const label = document.getElementById('progress-label');
+  progress.style.display = 'block';
+  fill.style.width = '0%';
+
+  let pct = 0;
+  const interval = setInterval(() => {
+    pct = Math.min(pct + Math.random() * 8, 85);
+    fill.style.width = pct + '%';
+    if (pct < 30) label.textContent = 'Gmail에서 이메일 가져오는 중...';
+    else if (pct < 60) label.textContent = 'AI 분류 중...';
+    else label.textContent = '첨부파일 및 품목 분석 중...';
+  }, 800);
+
+  try {
+    const data = await API.get('/api/emails?max_results=50');
+    clearInterval(interval);
+    fill.style.width = '100%';
+    label.textContent = `완료! ${data.emails.length}개 처리됨`;
+
+    state.emails = data.emails;
+    state.categoryCounts = data.categories || {};
+    state.totalFetched = data.total_fetched || 0;
+    updateCategoryCounts(state.categoryCounts);
+    applyFilter();
+
+    // Notifications
+    sendNotifications(data.emails);
+
+    // Toast summary
+    const found = data.emails.length;
+    const scanned = data.total_fetched || 0;
+    if (found > 0) {
+      toast(`${scanned}개 스캔 → 발주/견적 관련 ${found}개 발견`, 'warning', 5000);
+    } else {
+      toast(`${scanned}개 스캔 완료 — 발주/견적 메일 없음`, 'info');
+    }
+
+    setTimeout(() => { progress.style.display = 'none'; }, 2000);
+  } catch (e) {
+    clearInterval(interval);
+    progress.style.display = 'none';
+    if (!silent) setErrorState(e.message);
+    toast(`이메일 불러오기 실패: ${e.message}`, 'error');
+  } finally {
+    state.isLoading = false;
+    refreshBtn.disabled = false;
+    refreshIcon.style.animation = '';
+    refreshText.textContent = '새로고침';
+    if (!silent) setLoadingState(false);
+  }
+}
+
+// ── Filter ──
+function filterCategory(category) {
+  state.currentCategory = category;
+  state.selectedEmailId = null;
+  closeDetail();
+  document.querySelectorAll('.sidebar-item[data-category]').forEach(el => {
+    el.classList.toggle('active', el.dataset.category === category);
+  });
+  const titles = { All: '전체 메일', '발주서': '발주서', '견적서': '견적서', '견적의뢰서': '견적의뢰서', '기타': '기타' };
+  document.getElementById('list-title').textContent = titles[category] || category;
+  applyFilter();
+}
+
+function handleSearch(query) {
+  state.searchQuery = query.toLowerCase();
+  applyFilter();
+}
+
+function applyFilter() {
+  let emails = state.emails;
+  if (state.currentCategory !== 'All') {
+    emails = emails.filter(e => e.category === state.currentCategory);
+  }
+  if (state.searchQuery) {
+    emails = emails.filter(e =>
+      (e.subject || '').toLowerCase().includes(state.searchQuery) ||
+      (e.sender?.name || '').toLowerCase().includes(state.searchQuery) ||
+      (e.sender?.email || '').toLowerCase().includes(state.searchQuery) ||
+      (e.snippet || '').toLowerCase().includes(state.searchQuery) ||
+      (e.summary || '').toLowerCase().includes(state.searchQuery) ||
+      (e.products || '').toLowerCase().includes(state.searchQuery)
+    );
+  }
+  state.filteredEmails = emails;
+  renderEmailList();
+}
+
+// ── Render ──
+function setLoadingState(loading) {
+  document.getElementById('auth-state').style.display = 'none';
+  document.getElementById('loading-state').style.display = loading ? 'flex' : 'none';
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('error-state').style.display = 'none';
+  if (loading) document.getElementById('emails-container').innerHTML = '';
+}
+
+function setErrorState(message) {
+  document.getElementById('auth-state').style.display = 'none';
+  document.getElementById('loading-state').style.display = 'none';
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('error-state').style.display = 'flex';
+  document.getElementById('emails-container').innerHTML = '';
+  document.getElementById('error-message').textContent = message || '알 수 없는 오류';
+}
+
+function renderEmailList() {
+  const authState = document.getElementById('auth-state');
+  const loadingState = document.getElementById('loading-state');
+  const emptyState = document.getElementById('empty-state');
+  const errorState = document.getElementById('error-state');
+  const container = document.getElementById('emails-container');
+
+  authState.style.display = 'none';
+  loadingState.style.display = 'none';
+  errorState.style.display = 'none';
+
+  document.getElementById('email-count-badge').textContent = `${state.filteredEmails.length}개`;
+
+  if (!state.isAuthenticated) { authState.style.display = 'flex'; container.innerHTML = ''; return; }
+  if (state.filteredEmails.length === 0 && state.emails.length === 0) { container.innerHTML = ''; return; }
+  if (state.filteredEmails.length === 0) {
+    const isFiltered = state.currentCategory !== 'All' || state.searchQuery;
+    document.getElementById('empty-title').textContent = isFiltered ? '해당 항목 없음' : '발주/견적 메일 없음';
+    document.getElementById('empty-desc').textContent = isFiltered
+      ? '선택한 카테고리 또는 검색어에 해당하는 메일이 없습니다.'
+      : `최근 ${state.totalFetched}개 메일에서 발주·견적·견적의뢰 관련 내용이 발견되지 않았습니다.`;
+    emptyState.style.display = 'flex'; container.innerHTML = ''; return;
+  }
+
+  emptyState.style.display = 'none';
+  container.innerHTML = state.filteredEmails.map(renderEmailCard).join('');
+}
+
+function badgeClass(cat) {
+  return { '발주서': 'badge-발주서', '견적서': 'badge-견적서', '견적의뢰서': 'badge-견적의뢰서', '기타': 'badge-기타' }[cat] || 'badge-기타';
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    const diff = Date.now() - d;
+    const days = diff / 86400000;
+    if (days < 1) return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+    if (days < 7) return d.toLocaleDateString('ko-KR', { weekday: 'short' });
+    return d.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+  } catch { return dateStr.slice(0, 10); }
+}
+
+function getSenderName(email) {
+  return email.sender?.name || (email.sender?.email || '').split('@')[0] || '알 수 없음';
+}
+
+function renderEmailCard(email) {
+  const isImportant = IMPORTANT_CATS.includes(email.category);
+  const importantClass = isImportant ? `important cat-${email.category}` : '';
+  const selectedClass = email.id === state.selectedEmailId ? 'selected' : '';
+  const unreadClass = !email.is_read ? 'unread' : '';
+  const hasAttach = email.attachments && email.attachments.length > 0;
+
+  return `
+    <div class="email-card ${unreadClass} ${selectedClass} ${importantClass}"
+         onclick="selectEmail('${email.id}')" id="card-${email.id}">
+      <div class="email-card-header">
+        <span class="email-sender">${escapeHtml(getSenderName(email))}</span>
+        <span class="email-date">${formatDate(email.date)}</span>
+      </div>
+      <div class="email-subject">${escapeHtml(email.subject || '(제목 없음)')}</div>
+      <div class="email-preview">${escapeHtml(email.summary || email.snippet || '')}</div>
+      <div class="email-footer">
+        <span class="category-badge ${badgeClass(email.category)}">${email.category}</span>
+        ${hasAttach ? `<span class="attach-icon">📎 ${email.attachments.length}</span>` : ''}
+        ${email.ai_processed ? '<span style="font-size:10px;color:var(--text-muted);">🤖 AI</span>' : ''}
+        ${!email.is_read ? '<span class="unread-dot"></span>' : ''}
+      </div>
+    </div>`;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── Category Counts ──
+function updateCategoryCounts(counts) {
+  const cats = ['발주서', '견적서', '견적의뢰서', '기타'];
+  const total = cats.reduce((s, c) => s + (counts[c] || 0), 0);
+  document.getElementById('count-all').textContent = total;
+  cats.forEach(c => {
+    const el = document.getElementById(`count-${c}`);
+    if (el) el.textContent = counts[c] || 0;
+  });
+
+  const scanInfo = document.getElementById('scan-info');
+  if (state.totalFetched > 0) {
+    scanInfo.textContent = `(${state.totalFetched}개 스캔)`;
+    scanInfo.style.display = 'inline';
+  } else {
+    scanInfo.style.display = 'none';
+  }
+}
+
+// ── Email Detail ──
+function selectEmail(emailId) {
+  state.selectedEmailId = emailId;
+  document.querySelectorAll('.email-card').forEach(el => el.classList.remove('selected'));
+  const card = document.getElementById(`card-${emailId}`);
+  if (card) card.classList.add('selected');
+  const email = state.emails.find(e => e.id === emailId);
+  if (email) openDetail(email);
+}
+
+function openDetail(email) {
+  document.getElementById('email-detail-panel').classList.remove('collapsed');
+  document.getElementById('detail-category-badge').innerHTML =
+    `<span class="category-badge ${badgeClass(email.category)}">${email.category}</span>`;
+
+  const senderName = escapeHtml(getSenderName(email));
+  const senderEmail = escapeHtml(email.sender?.email || '');
+  const subject = escapeHtml(email.subject || '(제목 없음)');
+  const date = email.date ? new Date(email.date).toLocaleString('ko-KR') : '';
+  const bodyDisplay = escapeHtml((email.body_text || email.snippet || '(본문 없음)').slice(0, 5000));
+
+  const isImportant = IMPORTANT_CATS.includes(email.category);
+  const catClass = `cat-${email.category}`;
+
+  // Products section
+  const productsHtml = (isImportant && email.products) ? `
+    <div class="detail-section">
+      <div class="detail-section-title">📦 품목 정보</div>
+      <div class="products-box ${catClass}">${escapeHtml(email.products)}</div>
+    </div>` : '';
+
+  // Summary section
+  const summaryHtml = email.summary ? `
+    <div class="detail-section">
+      <div class="detail-section-title">AI 요약</div>
+      <div class="ai-summary-box"><span class="ai-icon">🤖</span>${escapeHtml(email.summary)}</div>
+    </div>` : '';
+
+  // Attachments section
+  const attachHtml = (email.attachments && email.attachments.length > 0) ? `
+    <div class="detail-section">
+      <div class="detail-section-title">첨부파일 (${email.attachments.length})</div>
+      <div class="attach-list">
+        ${email.attachments.map(a => `
+          <div class="attach-item">
+            <span class="attach-item-icon">${getFileIcon(a.filename)}</span>
+            <span class="attach-item-name">${escapeHtml(a.filename)}</span>
+            <span class="attach-item-size">${formatSize(a.size)}</span>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  document.getElementById('detail-content').innerHTML = `
+    <div class="detail-subject">${subject}</div>
+    <div class="detail-meta">
+      <div class="detail-meta-row"><span class="detail-meta-label">보낸이</span><span class="detail-meta-value">${senderName} &lt;${senderEmail}&gt;</span></div>
+      <div class="detail-meta-row"><span class="detail-meta-label">날짜</span><span class="detail-meta-value">${date}</span></div>
+    </div>
+    ${productsHtml}
+    ${summaryHtml}
+    ${attachHtml}
+    <div class="detail-section">
+      <div class="detail-section-title">본문</div>
+      <div class="detail-body">${bodyDisplay}</div>
+    </div>`;
+}
+
+function closeDetail() {
+  document.getElementById('email-detail-panel').classList.add('collapsed');
+  state.selectedEmailId = null;
+  document.querySelectorAll('.email-card').forEach(el => el.classList.remove('selected'));
+}
+
+function getFileIcon(filename) {
+  const ext = (filename || '').split('.').pop().toLowerCase();
+  const icons = { pdf: '📄', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊', csv: '📊', zip: '🗜', rar: '🗜', jpg: '🖼', jpeg: '🖼', png: '🖼', gif: '🖼', txt: '📃' };
+  return icons[ext] || '📎';
+}
+
+function formatSize(bytes) {
+  if (!bytes || bytes === 0) return '';
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+// ── Keyboard ──
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeDetail(); closeSettings(); }
+});
+
+init();
+</script>
+</body>
+</html>

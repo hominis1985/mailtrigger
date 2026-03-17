@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(node -e \"require\\(''./lib/gmail''\\); require\\(''./lib/gemini''\\); require\\(''./lib/attachments''\\); require\\(''./lib/cookies''\\); console.log\\(''All libs OK''\\)\")",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

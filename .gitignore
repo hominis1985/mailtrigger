@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.local
+.vercel/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+backend/client_secret.json
