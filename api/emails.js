@@ -95,9 +95,9 @@ async function processEmail(email, tokens, apiKey, model) {
     }
 
     // AI classification
-    const { category, summary, products } = await classifyEmail(email, attachmentTexts, apiKey, model);
+    const { category, summary, table } = await classifyEmail(email, attachmentTexts, apiKey, model);
 
-    return { ...email, category, summary, products, ai_processed: true };
+    return { ...email, category, summary, table, ai_processed: true };
   } catch (e) {
     console.error(`processEmail error (${email.id}):`, e.message);
     return null;

@@ -145,9 +145,26 @@
     .detail-section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
     .ai-summary-box { background: var(--accent-soft); border: 1px solid #6c63ff44; border-radius: var(--radius); padding: 14px; font-size: 13px; line-height: 1.6; color: var(--text-primary); }
     .ai-icon { font-size: 16px; margin-bottom: 6px; display: block; }
-    .products-box { background: #ef444410; border: 1px solid #ef444430; border-radius: var(--radius); padding: 14px; font-size: 13px; line-height: 1.7; color: var(--text-primary); white-space: pre-wrap; }
-    .products-box.cat-견적서 { background: #f59e0b10; border-color: #f59e0b30; }
-    .products-box.cat-견적의뢰서 { background: #6c63ff10; border-color: #6c63ff30; }
+    /* ── Table section ── */
+    .table-meta { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-bottom: 12px; font-size: 12px; }
+    .table-meta-item { display: flex; gap: 5px; }
+    .table-meta-label { color: var(--text-muted); }
+    .table-meta-value { color: var(--text-primary); font-weight: 600; }
+    .items-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .items-table th { background: var(--bg-active); color: var(--text-secondary); font-weight: 600; padding: 7px 10px; text-align: left; border: 1px solid var(--border-light); white-space: nowrap; }
+    .items-table td { padding: 7px 10px; border: 1px solid var(--border); color: var(--text-primary); vertical-align: top; }
+    .items-table tr:nth-child(even) td { background: #ffffff08; }
+    .items-table tr:hover td { background: var(--bg-hover); }
+    .table-footer { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; }
+    .table-summary-row { display: flex; gap: 5px; }
+    .table-summary-label { color: var(--text-muted); }
+    .table-summary-value { color: var(--text-primary); font-weight: 700; }
+    .btn-pdf { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 8px 16px; background: #ef444415; border: 1px solid #ef444440; color: #ef4444; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; cursor: pointer; transition: var(--transition); }
+    .btn-pdf:hover { background: #ef444425; }
+    .btn-pdf.cat-견적서 { background: #f59e0b15; border-color: #f59e0b40; color: #f59e0b; }
+    .btn-pdf.cat-견적서:hover { background: #f59e0b25; }
+    .btn-pdf.cat-견적의뢰서 { background: #6c63ff15; border-color: #6c63ff40; color: #a78bfa; }
+    .btn-pdf.cat-견적의뢰서:hover { background: #6c63ff25; }
     .detail-body { font-size: 13px; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 350px; overflow-y: auto; background: var(--bg-card); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border); }
     .attach-list { display: flex; flex-direction: column; gap: 6px; }
     .attach-item { display: flex; align-items: center; gap: 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 12px; color: var(--text-secondary); }
@@ -832,7 +849,7 @@ function applyFilter() {
       (e.sender?.email || '').toLowerCase().includes(state.searchQuery) ||
       (e.snippet || '').toLowerCase().includes(state.searchQuery) ||
       (e.summary || '').toLowerCase().includes(state.searchQuery) ||
-      (e.products || '').toLowerCase().includes(state.searchQuery)
+      (e.table ? JSON.stringify(e.table) : '').toLowerCase().includes(state.searchQuery)
     );
   }
   state.filteredEmails = emails;
@@ -974,25 +991,20 @@ function openDetail(email) {
   const subject = escapeHtml(email.subject || '(제목 없음)');
   const date = email.date ? new Date(email.date).toLocaleString('ko-KR') : '';
   const bodyDisplay = escapeHtml((email.body_text || email.snippet || '(본문 없음)').slice(0, 5000));
-
   const isImportant = IMPORTANT_CATS.includes(email.category);
   const catClass = `cat-${email.category}`;
 
-  // Products section
-  const productsHtml = (isImportant && email.products) ? `
-    <div class="detail-section">
-      <div class="detail-section-title">📦 품목 정보</div>
-      <div class="products-box ${catClass}">${escapeHtml(email.products)}</div>
-    </div>` : '';
+  // ── Table section ──
+  const tableHtml = (isImportant && email.table) ? renderTableSection(email) : '';
 
-  // Summary section
+  // ── Summary section ──
   const summaryHtml = email.summary ? `
     <div class="detail-section">
       <div class="detail-section-title">AI 요약</div>
       <div class="ai-summary-box"><span class="ai-icon">🤖</span>${escapeHtml(email.summary)}</div>
     </div>` : '';
 
-  // Attachments section
+  // ── Attachments section ──
   const attachHtml = (email.attachments && email.attachments.length > 0) ? `
     <div class="detail-section">
       <div class="detail-section-title">첨부파일 (${email.attachments.length})</div>
@@ -1012,13 +1024,144 @@ function openDetail(email) {
       <div class="detail-meta-row"><span class="detail-meta-label">보낸이</span><span class="detail-meta-value">${senderName} &lt;${senderEmail}&gt;</span></div>
       <div class="detail-meta-row"><span class="detail-meta-label">날짜</span><span class="detail-meta-value">${date}</span></div>
     </div>
-    ${productsHtml}
+    ${tableHtml}
     ${summaryHtml}
     ${attachHtml}
     <div class="detail-section">
       <div class="detail-section-title">본문</div>
       <div class="detail-body">${bodyDisplay}</div>
     </div>`;
+}
+
+function renderTableSection(email) {
+  const t = email.table;
+  const catClass = `cat-${email.category}`;
+
+  // Meta row (거래처, 날짜, 문서번호, 납기)
+  const metaFields = [
+    ['거래처', t.거래처], ['문서번호', t.문서번호], ['날짜', t.날짜], ['납기', t.납기]
+  ].filter(([, v]) => v);
+
+  const metaHtml = metaFields.length ? `
+    <div class="table-meta">
+      ${metaFields.map(([l, v]) => `
+        <div class="table-meta-item">
+          <span class="table-meta-label">${l}:</span>
+          <span class="table-meta-value">${escapeHtml(String(v))}</span>
+        </div>`).join('')}
+    </div>` : '';
+
+  // Items table
+  const items = Array.isArray(t.items) ? t.items : [];
+  // Determine which columns have data
+  const hasDanPrice = items.some(i => i.단가);
+  const hasAmount   = items.some(i => i.금액);
+
+  const thead = `<tr>
+    <th>제품명</th><th>규격</th><th>수량</th>
+    ${hasDanPrice ? '<th>단가</th>' : ''}
+    ${hasAmount   ? '<th>금액</th>' : ''}
+  </tr>`;
+
+  const tbody = items.map(i => `<tr>
+    <td>${escapeHtml(i.제품명 || '-')}</td>
+    <td>${escapeHtml(i.규격   || '-')}</td>
+    <td>${escapeHtml(i.수량   || '-')}</td>
+    ${hasDanPrice ? `<td>${escapeHtml(i.단가 || '-')}</td>` : ''}
+    ${hasAmount   ? `<td>${escapeHtml(i.금액 || '-')}</td>` : ''}
+  </tr>`).join('');
+
+  const tableHtml = items.length ? `
+    <div style="overflow-x:auto;">
+      <table class="items-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+    </div>` : '<div style="color:var(--text-muted);font-size:12px;">품목 정보 없음</div>';
+
+  // Footer (합계, 비고)
+  const footerFields = [['합계', t.합계], ['비고', t.비고]].filter(([, v]) => v);
+  const footerHtml = footerFields.length ? `
+    <div class="table-footer">
+      ${footerFields.map(([l, v]) => `
+        <div class="table-summary-row">
+          <span class="table-summary-label">${l}:</span>
+          <span class="table-summary-value">${escapeHtml(String(v))}</span>
+        </div>`).join('')}
+    </div>` : '';
+
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">📋 품목 내역</div>
+      ${metaHtml}
+      ${tableHtml}
+      ${footerHtml}
+      <button class="btn-pdf ${catClass}" onclick="downloadPDF('${email.id}')">
+        ⬇ PDF 다운로드
+      </button>
+    </div>`;
+}
+
+function downloadPDF(emailId) {
+  const email = state.emails.find(e => e.id === emailId);
+  if (!email) return;
+
+  const t = email.table || {};
+  const items = Array.isArray(t.items) ? t.items : [];
+  const hasDan = items.some(i => i.단가);
+  const hasAmt = items.some(i => i.금액);
+
+  const cols = ['제품명', '규격', '수량', ...(hasDan ? ['단가'] : []), ...(hasAmt ? ['금액'] : [])];
+  const colWidth = Math.floor(100 / cols.length);
+
+  const metaRows = [
+    ['거래처', t.거래처], ['문서번호', t.문서번호], ['날짜', t.날짜], ['납기', t.납기]
+  ].filter(([, v]) => v);
+
+  const footerRows = [['합계', t.합계], ['비고', t.비고]].filter(([, v]) => v);
+
+  const tableRows = items.map(i => `
+    <tr>
+      <td>${i.제품명 || ''}</td>
+      <td>${i.규격 || ''}</td>
+      <td>${i.수량 || ''}</td>
+      ${hasDan ? `<td>${i.단가 || ''}</td>` : ''}
+      ${hasAmt  ? `<td>${i.금액 || ''}</td>` : ''}
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="UTF-8">
+<title>${email.category} – ${t.거래처 || ''}</title>
+<style>
+  body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; font-size: 13px; color: #1a1a1a; padding: 32px; max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 800; text-align: center; margin-bottom: 6px; letter-spacing: 2px; }
+  .subject { text-align: center; font-size: 13px; color: #666; margin-bottom: 24px; }
+  .meta-grid { display: flex; flex-wrap: wrap; gap: 6px 32px; margin-bottom: 20px; padding: 12px 16px; background: #f7f7f7; border-radius: 6px; }
+  .meta-item { display: flex; gap: 6px; }
+  .meta-label { color: #888; }
+  .meta-value { font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  th { background: #1a1a2e; color: white; padding: 9px 10px; text-align: left; font-size: 12px; }
+  td { padding: 8px 10px; border-bottom: 1px solid #e5e5e5; font-size: 12px; }
+  tr:nth-child(even) td { background: #fafafa; }
+  .footer { display: flex; gap: 32px; padding: 10px 16px; background: #f0f0f0; border-radius: 6px; font-weight: 700; }
+  .footer-label { color: #888; font-weight: 400; margin-right: 4px; }
+  @media print { button { display: none; } }
+</style>
+</head><body>
+<h1>${email.category}</h1>
+<div class="subject">${email.subject || ''}</div>
+${metaRows.length ? `<div class="meta-grid">${metaRows.map(([l,v]) => `<div class="meta-item"><span class="meta-label">${l}:</span><span class="meta-value">${v}</span></div>`).join('')}</div>` : ''}
+<table>
+  <thead><tr>${cols.map(c => `<th style="width:${colWidth}%">${c}</th>`).join('')}</tr></thead>
+  <tbody>${tableRows || '<tr><td colspan="' + cols.length + '" style="text-align:center;color:#999;">품목 없음</td></tr>'}</tbody>
+</table>
+${footerRows.length ? `<div class="footer">${footerRows.map(([l,v]) => `<span><span class="footer-label">${l}:</span>${v}</span>`).join('')}</div>` : ''}
+<script>window.onload = function() { window.print(); }<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { toast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.', 'error'); return; }
+  win.document.write(html);
+  win.document.close();
 }
 
 function closeDetail() {
