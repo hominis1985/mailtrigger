@@ -95,8 +95,15 @@ async function processEmail(email, tokens, apiKey, model) {
     }
 
     // AI classification
-    const { category, summary, table } = await classifyEmail(email, attachmentTexts, apiKey, model);
+    const { category, summary, table, reason } = await classifyEmail(email, attachmentTexts, apiKey, model);
 
+    // null category = AI decided this is not a relevant document
+    if (!category) {
+      console.log(`[SKIP] "${email.subject}" — ${reason}`);
+      return null;
+    }
+
+    console.log(`[MATCH] ${category} — "${email.subject}" (${reason})`);
     return { ...email, category, summary, table, ai_processed: true };
   } catch (e) {
     console.error(`processEmail error (${email.id}):`, e.message);

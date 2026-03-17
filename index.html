@@ -165,6 +165,8 @@
     .btn-pdf.cat-견적서:hover { background: #f59e0b25; }
     .btn-pdf.cat-견적의뢰서 { background: #6c63ff15; border-color: #6c63ff40; color: #a78bfa; }
     .btn-pdf.cat-견적의뢰서:hover { background: #6c63ff25; }
+    .btn-copy { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; margin-left: 8px; padding: 8px 16px; background: var(--bg-card); border: 1px solid var(--border-light); color: var(--text-secondary); border-radius: var(--radius-sm); font-size: 12px; font-weight: 600; cursor: pointer; transition: var(--transition); }
+    .btn-copy:hover { background: var(--bg-hover); color: var(--text-primary); }
     .detail-body { font-size: 13px; line-height: 1.7; color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; max-height: 350px; overflow-y: auto; background: var(--bg-card); border-radius: var(--radius-sm); padding: 14px; border: 1px solid var(--border); }
     .attach-list { display: flex; flex-direction: column; gap: 6px; }
     .attach-item { display: flex; align-items: center; gap: 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; font-size: 12px; color: var(--text-secondary); }
@@ -271,7 +273,7 @@
       </button>
 
       <div class="auto-refresh-row">
-        <span class="auto-refresh-label">자동 새로고침 (5분)</span>
+        <span class="auto-refresh-label">자동 새로고침 (30분)</span>
         <label class="toggle">
           <input type="checkbox" id="toggle-autorefresh" onchange="toggleAutoRefresh(this.checked)">
           <span class="toggle-slider"></span>
@@ -595,8 +597,8 @@ function toggleAutoRefresh(enabled) {
       if (state.isAuthenticated && state.settings.gemini_api_key && !state.isLoading) {
         fetchEmails(true); // silent refresh
       }
-    }, 5 * 60 * 1000);
-    toast('자동 새로고침 활성화 (5분 간격)', 'info');
+    }, 30 * 60 * 1000);
+    toast('자동 새로고침 활성화 (30분 간격)', 'info');
   } else {
     toast('자동 새로고침 비활성화', 'info');
   }
@@ -799,9 +801,9 @@ async function fetchEmails(silent = false) {
     const found = data.emails.length;
     const scanned = data.total_fetched || 0;
     if (found > 0) {
-      toast(`${scanned}개 스캔 → 발주/견적 관련 ${found}개 발견`, 'warning', 5000);
+      toast(`오늘 메일 ${scanned}개 스캔 → 발주/견적 ${found}개 발견`, 'warning', 5000);
     } else {
-      toast(`${scanned}개 스캔 완료 — 발주/견적 메일 없음`, 'info');
+      toast(`오늘 메일 ${scanned}개 스캔 완료 — 발주/견적 메일 없음`, 'info');
     }
 
     setTimeout(() => { progress.style.display = 'none'; }, 2000);
@@ -894,7 +896,7 @@ function renderEmailList() {
     document.getElementById('empty-title').textContent = isFiltered ? '해당 항목 없음' : '발주/견적 메일 없음';
     document.getElementById('empty-desc').textContent = isFiltered
       ? '선택한 카테고리 또는 검색어에 해당하는 메일이 없습니다.'
-      : `최근 ${state.totalFetched}개 메일에서 발주·견적·견적의뢰 관련 내용이 발견되지 않았습니다.`;
+      : `오늘 수신된 ${state.totalFetched}개 메일에서 발주·견적·견적의뢰 문서가 발견되지 않았습니다.`;
     emptyState.style.display = 'flex'; container.innerHTML = ''; return;
   }
 
@@ -964,7 +966,7 @@ function updateCategoryCounts(counts) {
 
   const scanInfo = document.getElementById('scan-info');
   if (state.totalFetched > 0) {
-    scanInfo.textContent = `(${state.totalFetched}개 스캔)`;
+    scanInfo.textContent = `(오늘 수신 ${state.totalFetched}개 스캔)`;
     scanInfo.style.display = 'inline';
   } else {
     scanInfo.style.display = 'none';
@@ -1093,9 +1095,8 @@ function renderTableSection(email) {
       ${metaHtml}
       ${tableHtml}
       ${footerHtml}
-      <button class="btn-pdf ${catClass}" onclick="downloadPDF('${email.id}')">
-        ⬇ PDF 다운로드
-      </button>
+      <button class="btn-pdf ${catClass}" onclick="downloadPDF('${email.id}')">⬇ PDF 다운로드</button>
+      <button class="btn-copy" onclick="copyTable('${email.id}')">📋 복사</button>
     </div>`;
 }
 
@@ -1162,6 +1163,49 @@ ${footerRows.length ? `<div class="footer">${footerRows.map(([l,v]) => `<span><s
   if (!win) { toast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.', 'error'); return; }
   win.document.write(html);
   win.document.close();
+}
+
+function copyTable(emailId) {
+  const email = state.emails.find(e => e.id === emailId);
+  if (!email || !email.table) { toast('복사할 표 데이터가 없습니다.', 'error'); return; }
+
+  const t = email.table;
+  const items = Array.isArray(t.items) ? t.items : [];
+  const hasDan = items.some(i => i.단가);
+  const hasAmt = items.some(i => i.금액);
+
+  const lines = [];
+
+  // Document header
+  lines.push(`[${email.category}] ${email.subject}`);
+  lines.push('');
+
+  // Meta info
+  [['거래처', t.거래처], ['문서번호', t.문서번호], ['날짜', t.날짜], ['납기', t.납기]]
+    .filter(([, v]) => v)
+    .forEach(([l, v]) => lines.push(`${l}\t${v}`));
+  lines.push('');
+
+  // Table header
+  const cols = ['제품명', '규격', '수량', ...(hasDan ? ['단가'] : []), ...(hasAmt ? ['금액'] : [])];
+  lines.push(cols.join('\t'));
+
+  // Items
+  items.forEach(i => {
+    const row = [i.제품명 || '', i.규격 || '', i.수량 || ''];
+    if (hasDan) row.push(i.단가 || '');
+    if (hasAmt)  row.push(i.금액 || '');
+    lines.push(row.join('\t'));
+  });
+
+  // Footer
+  lines.push('');
+  [['합계', t.합계], ['비고', t.비고]].filter(([, v]) => v)
+    .forEach(([l, v]) => lines.push(`${l}\t${v}`));
+
+  navigator.clipboard.writeText(lines.join('\n'))
+    .then(() => toast('클립보드에 복사되었습니다. Excel에 붙여넣기 가능합니다.', 'success'))
+    .catch(() => toast('복사 실패: 브라우저 권한을 확인하세요.', 'error'));
 }
 
 function closeDetail() {
