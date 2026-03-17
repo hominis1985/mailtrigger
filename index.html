@@ -801,9 +801,9 @@ async function fetchEmails(silent = false) {
     const found = data.emails.length;
     const scanned = data.total_fetched || 0;
     if (found > 0) {
-      toast(`오늘 메일 ${scanned}개 스캔 → 발주/견적 ${found}개 발견`, 'warning', 5000);
+      toast(`오늘 안읽은 메일 ${scanned}개 스캔 → 발주/견적 ${found}개 발견`, 'warning', 5000);
     } else {
-      toast(`오늘 메일 ${scanned}개 스캔 완료 — 발주/견적 메일 없음`, 'info');
+      toast(`오늘 안읽은 메일 ${scanned}개 스캔 완료 — 발주/견적 메일 없음`, 'info');
     }
 
     setTimeout(() => { progress.style.display = 'none'; }, 2000);
